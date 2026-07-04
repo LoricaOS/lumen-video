@@ -1,0 +1,12 @@
+/toolkit/
+/build/
+/references/
+/vendor/
+video.elf
+video-shot
+shot.ppm
+shot.log
+*.hpkg
+*.hpkg.sig
+*.o
+*.d
