@@ -297,11 +297,17 @@ int main(int argc, char **argv)
         return shot(argv[2], argc > 3 ? atoi(argv[3]) : 30);
     }
 
-    if (argc < 2 || !argv[1][0]) {
+    /* With a file arg, play it. With none, fall back to the autoplay clip at a
+     * fixed path — this is how the launcher/autostart (vigil execs the binary
+     * with no args) starts a demo/kiosk video. Absent that file: usage. */
+    if (argc >= 2 && argv[1][0]) {
+        g_path = argv[1];
+    } else if (access("/usr/share/video/autoplay.mp4", R_OK) == 0) {
+        g_path = "/usr/share/video/autoplay.mp4";
+    } else {
         dprintf(2, "usage: video <file>   (or: video -shot <file> [frame])\n");
         return 2;
     }
-    g_path = argv[1];
 
     int lfd = lumen_connect_retry();
     if (lfd < 0) { dprintf(2, "[VIDEO] lumen_connect failed\n"); return 1; }
