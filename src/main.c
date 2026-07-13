@@ -289,6 +289,20 @@ static long clock_now(long wall_start)
     return now_ms() - wall_start;
 }
 
+/* Top-bar menu: one item per real action (Stop, Close). No pause/seek in v1. */
+enum { CMD_STOP = 1, CMD_CLOSE = 2 };
+
+static void publish_menu(lumen_window_t *win)
+{
+    lumen_set_menu_t m;
+    glyph_menu_reset(&m, win->id);
+    int pb = glyph_menu_add_col(&m, "Playback");
+    glyph_menu_add_item(&m, pb, "Stop", CMD_STOP);
+    int f = glyph_menu_add_col(&m, "File");
+    glyph_menu_add_item(&m, f, "Close", CMD_CLOSE);
+    lumen_window_set_menu(win, &m);
+}
+
 int main(int argc, char **argv)
 {
     /* -shot <file> [frame]: offscreen render smoke test (no compositor). */
@@ -319,6 +333,7 @@ int main(int argc, char **argv)
     p.surf = (surface_t){ .buf = (uint32_t *)p.win->backbuf,
                           .w = p.win->w, .h = p.win->h, .pitch = p.win->stride };
     font_init();
+    publish_menu(p.win);
 
     /* Video decode context. */
     AVFormatContext *fmt = NULL;
@@ -365,6 +380,13 @@ int main(int argc, char **argv)
         lumen_event_t ev;
         while (lumen_poll_event(lfd, &ev) == 1) {
             if (ev.type == LUMEN_EV_CLOSE_REQUEST) { g_quit = 1; break; }
+            if (ev.type == LUMEN_EV_MENU_INVOKE) {
+                if (ev.menu.command == CMD_STOP) {
+                    if (playing) { syscall(SYS_AUDIO_STOP); playing = 0; }
+                } else if (ev.menu.command == CMD_CLOSE) {
+                    g_quit = 1; break;
+                }
+            }
             if (ev.type == LUMEN_EV_KEY && ev.key.pressed) {
                 uint8_t k = (uint8_t)ev.key.keycode;
                 if (k == 'q' || k == 'Q' || k == 0x1B) { g_quit = 1; break; }
