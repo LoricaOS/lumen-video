@@ -17,6 +17,13 @@ FFMPEG_SRC="$REPO/references/ffmpeg"
 BUILD_DIR="$REPO/build/ffmpeg-build${SUFFIX}"
 OUT="$REPO/build/ffmpeg-install${SUFFIX}"
 
+# Cross builds: configure can't run the target test binary, so it must be told
+# explicitly. Set CROSS_PREFIX to the binutils prefix (e.g. aarch64-linux-gnu-)
+# so ar/nm/ranlib/strip resolve. Empty (native) → no cross flags.
+CROSS_PREFIX="${CROSS_PREFIX:-}"
+cross_args=""
+[ -n "$CROSS_PREFIX" ] && cross_args="--enable-cross-compile --cross-prefix=$CROSS_PREFIX"
+
 [ -f "$FFMPEG_SRC/configure" ] || bash "$REPO/tools/fetch-ffmpeg.sh"
 
 mkdir -p "$BUILD_DIR"
@@ -29,6 +36,7 @@ cd "$BUILD_DIR"
 "$FFMPEG_SRC/configure" \
   --cc="$CC" \
   --arch="$ARCH" \
+  $cross_args \
   --target-os=linux \
   --prefix="$OUT" \
   --extra-cflags="-O2 -fno-pie" \
