@@ -292,12 +292,14 @@ static long clock_now(long wall_start)
 /* Top-bar menu: one item per real action (Stop, Close). No pause/seek in v1. */
 enum { CMD_STOP = 1, CMD_CLOSE = 2 };
 
-static void publish_menu(lumen_window_t *win)
+static void publish_menu(lumen_window_t *win, int has_video)
 {
     lumen_set_menu_t m;
     glyph_menu_reset(&m, win->id);
-    int pb = glyph_menu_add_col(&m, "Playback");
-    glyph_menu_add_item(&m, pb, "Stop", CMD_STOP);
+    if (has_video) {
+        int pb = glyph_menu_add_col(&m, "Playback");
+        glyph_menu_add_item(&m, pb, "Stop", CMD_STOP);
+    }
     int f = glyph_menu_add_col(&m, "File");
     glyph_menu_add_item(&m, f, "Close", CMD_CLOSE);
     lumen_window_set_menu(win, &m);
@@ -311,17 +313,12 @@ int main(int argc, char **argv)
         return shot(argv[2], argc > 3 ? atoi(argv[3]) : 30);
     }
 
-    /* With a file arg, play it. With none, fall back to the autoplay clip at a
-     * fixed path — this is how the launcher/autostart (vigil execs the binary
-     * with no args) starts a demo/kiosk video. Absent that file: usage. */
+    /* With no path, open an idle player instead of flashing a dead launcher. */
     if (argc >= 2 && argv[1][0]) {
         g_path = argv[1];
     } else if (access("/usr/share/video/autoplay.mp4", R_OK) == 0) {
         g_path = "/usr/share/video/autoplay.mp4";
-    } else {
-        dprintf(2, "usage: video <file>   (or: video -shot <file> [frame])\n");
-        return 2;
-    }
+    } else g_path = NULL;
 
     int lfd = lumen_connect_retry();
     if (lfd < 0) { dprintf(2, "[VIDEO] lumen_connect failed\n"); return 1; }
@@ -333,7 +330,28 @@ int main(int argc, char **argv)
     p.surf = (surface_t){ .buf = (uint32_t *)p.win->backbuf,
                           .w = p.win->w, .h = p.win->h, .pitch = p.win->stride };
     font_init();
-    publish_menu(p.win);
+    publish_menu(p.win, g_path != NULL);
+
+    if (!g_path) {
+        draw_fill_rect(&p.surf, 0, 0, p.w, p.h, THEME_SURFACE);
+        draw_text_ui(&p.surf, 40, 48, "Open a video from Files", THEME_TEXT);
+        draw_text_ui(&p.surf, 40, 76,
+                     "Select a video file to start playback.", THEME_TEXT_DIM);
+        lumen_window_present(p.win);
+        dprintf(2, "[VIDEO] idle — waiting for a file\n");
+        while (!g_quit) {
+            lumen_event_t ev;
+            int r = lumen_wait_event(lfd, &ev, -1);
+            if (r < 0 || (r == 1 &&
+                (ev.type == LUMEN_EV_CLOSE_REQUEST ||
+                 (ev.type == LUMEN_EV_MENU_INVOKE &&
+                  ev.menu.command == CMD_CLOSE))))
+                break;
+        }
+        lumen_window_destroy(p.win);
+        close(lfd);
+        return 0;
+    }
 
     /* Video decode context. */
     AVFormatContext *fmt = NULL;
